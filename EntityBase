@@ -1,0 +1,109 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Text;
+
+namespace NORM.Entity
+{
+    public class EntityBase : ICloneable
+    {
+        Dictionary<string, object> _py_dis = new Dictionary<string, object>();
+
+        /// <summary>
+        /// 表名
+        /// </summary>
+        public string TableName
+        {
+            get;
+            set;
+        }
+
+        /// <summary>
+        /// 属性列表
+        /// </summary>
+        public string[] Properties
+        {
+            get
+            {
+                List<string> list = new List<string>();
+                var PropertiesInfo = CacheProperties.cacheInstance.GetProperties(this.GetType());
+                foreach (var pi in PropertiesInfo)
+                {
+                    list.Add(pi.Name);
+                }
+                return list.ToArray();
+            }
+        }
+
+        public List<string> PrimaryKey = new List<string>();
+
+        public PropertyChangedHandler PropertyOnGetting = null;
+
+        public PropertyChangedHandler PropertyOnSetting = null;
+
+        public virtual object GetPropertyValue(string PropertyName)
+        {
+            Type type = this.GetType();
+            return CacheProperties.cacheInstance.GetProperty(type, PropertyName).GetValue(this, null);
+        }
+
+        public object Clone()
+        {
+            return MemberwiseClone();
+        }
+
+        public object EntityClone()
+        {
+            MemoryStream stream = new MemoryStream();
+            BinaryFormatter formatter = new BinaryFormatter();
+            formatter.Serialize(stream, this);
+            stream.Position = 0;
+            return formatter.Deserialize(stream);
+        }
+
+        public bool ContainsKeys(string key)
+        {
+            foreach (string k in _py_dis.Keys)
+            {
+                if (key.Equals(k))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        protected T getProperty<T>(string Name)
+        {
+            if (this.PropertyOnGetting != null)
+            {
+                this.PropertyOnGetting(this, new EntityPropertyArgs(Name, typeof(T), 1));
+            }
+
+            object value = null;
+            if (_py_dis.TryGetValue(Name, out value))
+                return (T)value;
+            else
+                return default(T);
+        }
+
+        protected void setProperty<T>(string Name, T Value)
+        {
+            if (this.PropertyOnSetting != null)
+            {
+                this.PropertyOnSetting(this, new EntityPropertyArgs(Name, typeof(T), 2));
+            }
+            if (!ContainsKeys(Name))
+            {
+                _py_dis.Add(Name, Value);
+            }
+            else
+            {
+                _py_dis[Name] = Value;
+            }
+        }      
+        
+    }    
+}
